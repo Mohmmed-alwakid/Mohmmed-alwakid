@@ -1,11 +1,14 @@
- Hi, I'm Mohammed Alwakid, a product manager passionate about creating impactful digital experiences.
+## Hi, I’m Mohammed Alwakid
 
- currntly working at [Afkar](https://afakar.com), xMjlsi, xClassera
+I’m a Product Manager and the founder of [AfkarLab](https://afkarlab.com), passionate about building impactful, user-centric digital products.
 
-My focus is on building user-centric products that solve real problems and deliver value.
+Previously, I worked on products at **Mjlsi** and **Classera**, contributing to solutions across SaaS, governance, and education technology.
 
-I'm constantly learning and exploring new technologies and product development methodologies.
+My focus is on turning real user problems into valuable, intuitive experiences through product strategy, research, collaboration, and continuous improvement.
 
-I'd love to collaborate on projects focused on innovation and user satisfaction.
+I’m always exploring emerging technologies, product development practices, and new ways to create meaningful customer value.
 
-Reach me at [Email](mohmmedalwakid@gmail.com) or connect on [LinkedIn](https://www.linkedin.com/in/mohmmed-alwakid)
+I’m open to collaborating on innovative projects focused on solving real problems and improving user satisfaction.
+
+📧 [Email me](mailto:mohmmedalwakid@gmail.com)  
+🔗 [Connect with me on LinkedIn](https://www.linkedin.com/in/mohmmed-alwakid)
