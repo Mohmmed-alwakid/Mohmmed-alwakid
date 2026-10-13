@@ -39,6 +39,7 @@ def tick():
             state["actions_executed"] += 1
             events.insert(0, {"action":action,"verified":True,"mock_only":True})
             del events[50:]
+            print(f"SIMULATION_ACTION action={action} count={state['actions_executed']}", flush=True)
 
 def worker():
     while not halt.wait(5):
