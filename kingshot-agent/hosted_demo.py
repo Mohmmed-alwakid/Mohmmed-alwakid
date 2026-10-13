@@ -1,12 +1,13 @@
 """Kingshot cloud demo: standalone SIMULATION ONLY, no actual game controls."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import RLock, Thread, Event
-import os, hmac, json
+import os, hmac, json, time
 
 state = {"mode":"simulation_only","live_game_connected":False,"resources":700,
     "resource_ready":True,"builder_idle":True,"training_idle":True,
     "running":False,"actions_executed":0,"purchases":"blocked","pvp":"blocked"}
 events = []
+cooldowns = {"resource": 0.0, "build": 0.0, "training": 0.0}
 lock = RLock()
 halt = Event()
 admin = os.getenv("ADMIN_TOKEN","")
@@ -14,18 +15,25 @@ admin = os.getenv("ADMIN_TOKEN","")
 def tick():
     with lock:
         if not state["running"]: return
+        now = time.monotonic()
+        if now >= cooldowns["resource"]: state["resource_ready"] = True
+        if now >= cooldowns["build"]: state["builder_idle"] = True
+        if now >= cooldowns["training"]: state["training_idle"] = True
         action = ""
         if state["resource_ready"]:
             state["resources"] += 120
             state["resource_ready"] = False
+            cooldowns["resource"] = now + 60
             action = "collect_resources"
         elif state["builder_idle"] and state["resources"] >= 300:
             state["resources"] -= 300
             state["builder_idle"] = False
+            cooldowns["build"] = now + 90
             action = "upgrade_building"
         elif state["training_idle"] and state["resources"] >= 100:
             state["resources"] -= 100
             state["training_idle"] = False
+            cooldowns["training"] = now + 60
             action = "train_troops"
         if action:
             state["actions_executed"] += 1
@@ -78,8 +86,8 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
 
 if __name__=="__main__":
-    auto=os.getenv("AUTO_START","0")=="1"
-    if auto and len(admin)<16:raise SystemExit("AUTO_START requires ADMIN_TOKEN (16+ chars)")
-    state["running"]=auto
+    # Safe public simulation auto-starts; POST controls require a separately configured secret.
+    # Without ADMIN_TOKEN, all operator API calls are rejected; no real-game controls exist.
+    state["running"]=True
     Thread(target=worker,daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0",int(os.getenv("PORT","8080"))),Handler).serve_forever()
