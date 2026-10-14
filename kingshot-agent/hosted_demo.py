@@ -1,7 +1,7 @@
 """Kingshot cloud demo: standalone SIMULATION ONLY, no actual game controls."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import RLock, Thread, Event
-import os, hmac, json, time
+import os, hmac, json, time, uuid
 
 state = {"mode":"simulation_only","live_game_connected":False,"resources":700,
     "resource_ready":True,"builder_idle":True,"training_idle":True,
@@ -11,6 +11,9 @@ cooldowns = {"resource": 0.0, "build": 0.0, "training": 0.0}
 lock = RLock()
 halt = Event()
 admin = os.getenv("ADMIN_TOKEN","")
+boot_id = uuid.uuid4().hex[:12]
+boot_at = time.monotonic()
+last_logged_http = {}
 
 def tick():
     with lock:
@@ -54,11 +57,25 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control","no-store")
         self.send_header("X-Content-Type-Options","nosniff")
         self.end_headers()
-        self.wfile.write(payload)
+        if self.command != "HEAD":
+            try:
+                self.wfile.write(payload)
+            except (BrokenPipeError, ConnectionResetError):
+                return
+        # Log a bounded sample only; never log query strings or authorization headers.
+        route = self.path.split("?", 1)[0]
+        if route in ("/healthz", "/api/status"):
+            now = time.monotonic()
+            with lock:
+                key = (self.command, route, code)
+                previous = last_logged_http.get(key, float("-inf"))
+                if now - previous >= 60:
+                    last_logged_http[key] = now
+                    print(f"SIM_HTTP_RESPONSE method={self.command} route={route} status={code} boot_id={boot_id}", flush=True)
     def do_GET(self):
         path=self.path.split("?",1)[0]
         if path=="/healthz":
-            return self.respond(200,{"ok":True,"mode":"simulation_only"})
+            return self.respond(200,{"ok":True,"mode":"simulation_only","boot_id":boot_id,"uptime_seconds":int(time.monotonic()-boot_at)})
         if path=="/api/status":
             with lock: data=dict(state)
             return self.respond(200,data)
@@ -68,6 +85,11 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/":
             page='''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kingshot AI Cloud Simulator</title><style>body{font:16px system-ui;background:#101727;color:#e6ecf7;max-width:750px;margin:40px auto;padding:22px}pre{background:#1c2944;padding:24px;border-radius:12px;overflow:auto}.c{color:#fbbf7e}</style></head><body><h1>Kingshot AI Cloud Simulator</h1><p class="c">Demo only. No live Kingshot account, Android device or game controls connected.</p><h2>Agent status</h2><pre id="state">Loading...</pre><h2>Actions</h2><pre id="log">Loading...</pre><p>Cloud free tiers may sleep or reset memory; 24/7 service is not guaranteed.</p><script>async function r(){try{let s=await(await fetch('/api/status')).json();let e=await(await fetch('/api/events')).json();document.getElementById('state').textContent=JSON.stringify(s,null,2);document.getElementById('log').textContent=JSON.stringify(e.events,null,2)}catch(x){document.getElementById('state').textContent='Service not available'}}r();setInterval(r,5000)</script></body></html>'''
             return self.respond(200,page.encode(),"text/html; charset=utf-8")
+        return self.respond(404,{"error":"not found"})
+    def do_HEAD(self):
+        path = self.path.split("?", 1)[0]
+        if path == "/healthz":
+            return self.respond(200,{"ok":True,"mode":"simulation_only","boot_id":boot_id})
         return self.respond(404,{"error":"not found"})
     def do_POST(self):
         if self.path!="/api/control":return self.respond(404,{"error":"not found"})
@@ -90,5 +112,8 @@ if __name__=="__main__":
     # Safe public simulation auto-starts; POST controls require a separately configured secret.
     # Without ADMIN_TOKEN, all operator API calls are rejected; no real-game controls exist.
     state["running"]=True
+    port = int(os.getenv("PORT", "10000"))
+    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    print(f"SIM_HTTP_LISTENING host=0.0.0.0 port={port} boot_id={boot_id} mode=simulation_only", flush=True)
     Thread(target=worker,daemon=True).start()
-    ThreadingHTTPServer(("0.0.0.0",int(os.getenv("PORT","8080"))),Handler).serve_forever()
+    server.serve_forever()
