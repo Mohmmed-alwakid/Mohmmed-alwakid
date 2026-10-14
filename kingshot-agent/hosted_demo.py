@@ -1,7 +1,7 @@
 """Kingshot cloud demo: standalone SIMULATION ONLY, no actual game controls."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import RLock, Thread, Event
-import os, hmac, json, time, uuid, http.client
+import os, hmac, json, time, uuid, http.client, ipaddress
 
 state = {"mode":"simulation_only","live_game_connected":False,"resources":700,
     "resource_ready":True,"builder_idle":True,"training_idle":True,
@@ -91,11 +91,18 @@ class Handler(BaseHTTPRequestHandler):
         if route in ("/healthz", "/api/status"):
             now = time.monotonic()
             with lock:
-                key = (self.command, route, code)
+                # Classify the direct socket peer without logging its IP address.
+                # A non-loopback peer demonstrates inbound network traffic to the app,
+                # but does NOT by itself prove public internet reachability.
+                try:
+                    peer_class = "loopback" if ipaddress.ip_address(self.client_address[0]).is_loopback else "nonloopback"
+                except ValueError:
+                    peer_class = "unknown"
+                key = (self.command, route, code, peer_class)
                 previous = last_logged_http.get(key, float("-inf"))
                 if now - previous >= 60:
                     last_logged_http[key] = now
-                    print(f"SIM_HTTP_RESPONSE method={self.command} route={route} status={code} boot_id={boot_id}", flush=True)
+                    print(f"SIM_HTTP_RESPONSE method={self.command} route={route} status={code} peer_class={peer_class} boot_id={boot_id}", flush=True)
     def do_GET(self):
         path=self.path.split("?",1)[0]
         if path=="/healthz":
