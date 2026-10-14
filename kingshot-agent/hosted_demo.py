@@ -1,7 +1,7 @@
 """Kingshot cloud demo: standalone SIMULATION ONLY, no actual game controls."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import RLock, Thread, Event
-import os, hmac, json, time, uuid
+import os, hmac, json, time, uuid, http.client
 
 state = {"mode":"simulation_only","live_game_connected":False,"resources":700,
     "resource_ready":True,"builder_idle":True,"training_idle":True,
@@ -47,6 +47,30 @@ def tick():
 def worker():
     while not halt.wait(5):
         tick()
+
+def local_smoke(port):
+    """Single startup-only loopback test. Never used to keep a free host awake."""
+    time.sleep(0.2)
+    checks = (("GET", "/healthz", 200), ("GET", "/api/status", 200),
+              ("HEAD", "/healthz", 200), ("POST", "/api/control", 401))
+    try:
+        for method, path, expected in checks:
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+            try:
+                connection.request(method, path)
+                response = connection.getresponse()
+                body = response.read()
+                if response.status != expected:
+                    raise AssertionError(f"{path}: expected {expected}, got {response.status}")
+                if method == "GET":
+                    decoded = json.loads(body)
+                    if decoded.get("mode") != "simulation_only":
+                        raise AssertionError("unexpected response mode")
+            finally:
+                connection.close()
+        print(f"SIM_LOCAL_HTTP_SMOKE result=PASS checks={len(checks)} boot_id={boot_id}", flush=True)
+    except Exception as exc:
+        print(f"SIM_LOCAL_HTTP_SMOKE result=FAIL error_type={type(exc).__name__} boot_id={boot_id}", flush=True)
 
 class Handler(BaseHTTPRequestHandler):
     def respond(self,code,payload,kind="application/json"):
@@ -116,4 +140,5 @@ if __name__=="__main__":
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"SIM_HTTP_LISTENING host=0.0.0.0 port={port} boot_id={boot_id} mode=simulation_only", flush=True)
     Thread(target=worker,daemon=True).start()
+    Thread(target=local_smoke,args=(port,),daemon=True).start()
     server.serve_forever()
